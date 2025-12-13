@@ -112,12 +112,14 @@ def railfence_decrypt(cipher:str, key:int):
 def coltrans_encrypt(plain:str, keys:list):
     plain = plain.strip().upper()
     cipher = ''
-    keys = [(k-1)%len(keys) if isinstance(k,int) else ord(k.strip().lower())%97%26 if isinstance(k,str) else None for k in keys]
+    keys = [int(k)%(len(keys)+1) if isinstance(k,int) or ord(k[0]) in range(48,58) else ord(k.strip().lower())%97%26 if isinstance(k,str) else None for k in keys]
     cols_num = len(keys)
     cols = [""] * cols_num
     rows_num = len(plain)//cols_num
     remainder = len(plain)%cols_num
-    plain += "X"*remainder
+    rows_num += 1 if remainder!= 0 else 0
+    # remainder = rows_num*cols_num - len(plain) #padding
+    # plain += "z"*remainder #padding
     rows_num += 1 if remainder!=0 else 0
     for i,char in enumerate(plain):
         col_idx = i%cols_num
@@ -130,9 +132,10 @@ def coltrans_encrypt(plain:str, keys:list):
 def coltrans_decrypt(cipher:str, keys:list):
     cipher = cipher.strip().upper()
     plain = ''
-    keys = [(k-1)%len(keys) if isinstance(k,int) else ord(k.strip().lower())%97%26 if isinstance(k,str) else None for k in keys]
+    keys = [int(k)%(len(keys)+1) if isinstance(k,int) or ord(k[0]) in range(48,58) else ord(k.strip().lower())%97%26 if isinstance(k,str) else None for k in keys]
     cols_num = len(keys)
     rows_num = len(cipher) // cols_num
+    remainder = len(cipher)%cols_num
     cols_index = []
     for ori_index, key in enumerate(keys):
         cols_index.append((key,ori_index))
@@ -140,13 +143,16 @@ def coltrans_decrypt(cipher:str, keys:list):
     recons_cols = [""] * cols_num
     cur_idx = 0
     for tmp,ori_index in sorted_key:
-        chunk = cipher[cur_idx:cur_idx+rows_num]
+        r_nums = rows_num + 1 if ori_index < remainder else rows_num
+        chunk = cipher[cur_idx:cur_idx+r_nums]
         recons_cols[ori_index] = chunk
-        cur_idx += rows_num
+        cur_idx += r_nums
+    rows_num += 1 if remainder != 0 else 0
     for r in range(rows_num):
         for c in range(cols_num):
-            plain += recons_cols[c][r]
-    return plain.rstrip("X")
+            if len(recons_cols[c]) > r:
+                plain += recons_cols[c][r]
+    return plain
 
 # cipher = vigenere_encrypt('hello123', 'abcdef')
 # decrypt = vigenere_decrypt(cipher, 'abcdef')
@@ -154,13 +160,18 @@ def coltrans_decrypt(cipher:str, keys:list):
 # cipher = affine_encrypt('hello123', 5, 12)
 # decrypt = affine_decrypt(cipher, 5, 12)
 
-# cipher = railfence_encrypt('HelloWorld', 3)
-# decrypt = railfence_decrypt(cipher, 3)
+# cipher = railfence_encrypt('MEETMELATER', 4)
+# decrypt = railfence_decrypt(cipher, 4)
 
 # cipher = coltrans_encrypt('helloworld', [3,2,4,1])
 # decrypt = coltrans_decrypt(cipher, [3,2,4,1])
-cipher = railfence_encrypt("MEETMELATER", 4)
-decrypt = railfence_decrypt(cipher, 4)
+# cipher = coltrans_encrypt("MEETMELATER", "2 3 5 4 1".split(" "))
+# decrypt = coltrans_decrypt(cipher, "2 3 5 4 1".split(" "))
+
+cipher = caesar_encrypt("MEETMELATER", 23)
+cipher = coltrans_encrypt(cipher,[5, 3, 1, 4, 2])
+decrypt = caesar_decrypt(cipher, 23)
+decrypt = coltrans_decrypt(decrypt,[5, 3, 1, 4, 2])
 
 
 print (cipher, decrypt)
