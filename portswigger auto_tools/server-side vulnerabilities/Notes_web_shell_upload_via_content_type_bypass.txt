@@ -1,0 +1,19 @@
+Lab: Web shell upload via Content-Type restriction bypass
+APPRENTICE
+
+Base url: https://0aa800b204a5eac5841065cd001a003c.web-security-academy.net/
+Login url: https://0aa800b204a5eac5841065cd001a003c.web-security-academy.net/login
+
+The avatar uploaded is stored in /file/avatars/ instead of /resources/images/ as such as other images
+The login form data: {csrf: <token>, username: <user>, password: <pass>}
+The file-upload form data: {avatar: (file_name, file_data, content_type)} and payload data: {csrf:<token>, user: username}
+
+Account url: https://0aa800b204a5eac5841065cd001a003c.web-security-academy.net/my-account
+
+The file uploaded will be called by GET https://0aa800b204a5eac5841065cd001a003c.web-security-academy.net/files/avatars/<file name>
+
+First try: upload file php directively 
+(Sorry, file type text/x-python is not allowed Only image/jpeg and image/png are allowed 
+Sorry, there was an error uploading your file.) -> The webserver check <content_type>
+
+
